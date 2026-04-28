@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Data Mining Dashboard</title>
+    <style>
+        body { font-family: Arial; text-align: center; padding: 30px; }
+        textarea, input, select { width: 60%; padding: 10px; margin: 10px; }
+        button { padding: 10px 20px; background: green; color: white; border: none; }
+        #output {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            background: #111;
+            color: #00ffcc;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: left;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Data Mining & Anomaly Detection</h2>
+
+<select id="algo" onchange="toggleInput()">
+    <option value="apriori">Apriori</option>
+    <option value="fp">FP-Growth</option>
+    <option value="zscore">Z-Score</option>
+    <option value="isolation">Isolation Forest</option>
+</select>
+
+<div id="transactionBox">
+<textarea id="transactions" rows="6"
+placeholder="milk,bread,butter&#10;bread,butter"></textarea>
+<input type="text" id="support" placeholder="Support">
+</div>
+
+<div id="numericBox" style="display:none;">
+<input type="text" id="values" placeholder="Enter numbers (comma separated)">
+</div>
+
+<br>
+<button onclick="run()">Run</button>
+
+<div id="output"></div>
+
+<script>
+function toggleInput() {
+    let algo = document.getElementById("algo").value;
+
+    if (algo === "apriori" || algo === "fp") {
+        document.getElementById("transactionBox").style.display = "block";
+        document.getElementById("numericBox").style.display = "none";
+    } else {
+        document.getElementById("transactionBox").style.display = "none";
+        document.getElementById("numericBox").style.display = "block";
+    }
+}
+
+function run() {
+    let algo = document.getElementById("algo").value;
+    let outputDiv = document.getElementById("output");
+
+    let body = { algorithm: algo };
+
+    if (algo === "apriori" || algo === "fp") {
+        let transactions = document.getElementById("transactions").value
+            .split("\n").map(l => l.split(",").map(i => i.trim()));
+
+        body.transactions = transactions;
+        body.support = document.getElementById("support").value;
+    } else {
+        let values = document.getElementById("values").value
+            .split(",")
+            .map(v => v.trim())
+            .filter(v => v !== "");
+
+        body.values = values;
+    }
+
+    fetch("/run", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body)
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if (data.error) {
+            outputDiv.innerText = "Error: " + data.error;
+            return;
+        }
+
+        let output = "";
+
+        if (data[0] && data[0].items) {
+            output += "Frequent Itemsets:\n\n";
+            data.forEach(d => {
+                output += `{ ${d.items.join(", ")} } → Support: ${d.count}\n`;
+            });
+        }
+
+        else if (data[0] && data[0].z_score !== undefined) {
+            output += "Z-Score Results:\n\n";
+            data.forEach(d => {
+                output += `Value: ${d.value} | Z: ${d.z_score.toFixed(2)} | `;
+                output += d.outlier ? "Outlier\n" : "Normal\n";
+            });
+        }
+
+        else if (data[0] && data[0].outlier !== undefined) {
+            output += "Isolation Forest Results:\n\n";
+            data.forEach(d => {
+                output += `Value: ${d.value} → `;
+                output += d.outlier ? "Outlier\n" : "Normal\n";
+            });
+        }
+
+        outputDiv.innerText = output;
+    })
+    .catch(() => {
+        outputDiv.innerText = "Server error occurred";
+    });
+}
+</script>
+
+</body>
+</html>
